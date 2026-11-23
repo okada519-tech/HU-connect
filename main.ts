@@ -404,13 +404,13 @@ namespace HUConnect {
         wifiDisconnectedHandler = handler;
     }
 
-    /** Connect to a custom WebSocket server. Returns true when connected. */
-    //% block="connect to custom WebSocket URL %url"
+    /** Connect to a custom WebSocket server. This is a statement block. */
+    //% block="カスタムWebSocketに接続 URL %url"
     //% url.defl="ws://172.20.10.5:8765"
     //% weight=70
-    export function ConnectCustomWebSocket(url: string): boolean {
+    export function ConnectCustomWebSocket(url: string): void {
         GroveWiFi.WsSecurity();
-        return GroveWiFi.WsConnect(url);
+        GroveWiFi.WsConnect(url);
     }
 
     /** Send a text message over the established WebSocket connection. */
