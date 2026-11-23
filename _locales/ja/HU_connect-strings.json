@@ -10,3 +10,4 @@
   "HUConnect.CustomWebSocketDiagnostic|block": "カスタムWebSocketの応答を取得 URL %url",
   "HUConnect.DisconnectCustomWebSocket|block": "カスタムWebSocketを切断"
 }
+
