@@ -404,7 +404,8 @@ namespace HUConnect {
         wifiDisconnectedHandler = handler;
     }
 
-    /** Connect to a custom WebSocket server. This is a statement block. */
+    /** Connect to a custom WebSocket server. Statement block; no value is returned. */
+    //% blockId=HUConnect_ConnectCustomWebSocket
     //% block="カスタムWebSocketに接続 URL %url"
     //% url.defl="ws://172.20.10.5:8765"
     //% weight=70
