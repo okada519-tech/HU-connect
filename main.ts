@@ -420,6 +420,16 @@ namespace HUConnect {
     export function SendCustomWebSocketMessage(message: string): void {
         GroveWiFi.WsSend(message);
     }
+    /**
+     * Send a numeric value through WebSocket.
+     */
+    //% blockId=HUConnect_SendCustomWebSocketNumber
+    //% block="WebSocketで数値を送信 %value"
+    //% value.defl=23.6
+    //% weight=65
+    export function SendCustomWebSocketNumber(value: number): void {
+    GroveWiFi.WsSend(String(value));
+    }
 
     /** Return the raw response from a WebSocket connection attempt (diagnostic). */
     //% block="get custom WebSocket response for URL %url"
