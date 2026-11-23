@@ -126,3 +126,325 @@ namespace HUConnect {
                     str = str.substr(0, str.length - 1);
                 }
             }
+
+            // Debug print
+            //serial.writeString(str);
+
+            if (ReceivedData !== undefined) return;
+            ReceivedData = str.split(',');
+            for (let i = 0; i < ReceivedData.length; i++) {
+                ReceivedData[i] = ItemDecode(ReceivedData[i]);
+            }
+        }
+
+        export function Write(items: string[]): void {
+            for (let i = 0; i < items.length; i++) {
+                items[i] = ItemEncode(items[i]);
+            }
+            serial.writeString(START_CHAR + items.join(',') + END_CHAR);
+        }
+
+        export function PreRead(): void {
+            if (!AttachedDataReceived) {
+                serial.onDataReceived(serial.delimiters(Delimiters.NewLine), DataReceived);
+                AttachedDataReceived = true;
+            }
+
+            ReceivedData = undefined;
+        }
+
+        export function Read(): string[] {
+            let startTime = input.runningTime();
+            while (ReceivedData === undefined) {
+                if (input.runningTime() >= startTime + GROVE_WIFI_READ_TIMEOUT) control.panic(102);
+                basic.pause(POLLING_INTERVAL);
+            }
+
+            return ReceivedData;
+        }
+
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // SerialInterface
+
+    namespace GroveWiFi {
+
+        let Token = true;
+
+        function GetToken(): void {
+            let startTime = input.runningTime();
+            while (!Token) {
+                if (input.runningTime() >= startTime + GROVE_WIFI_GET_TOKEN_TIMEOUT) control.panic(101);
+                basic.pause(POLLING_INTERVAL);
+            }
+
+            Token = false;
+        }
+
+        function ReturnToken(): void {
+            Token = true;
+        }
+
+        export function WiFiStatus(): number {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["wifi_status"]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 2) control.panic(0);
+            if (res[0] !== "ok") control.panic(1);
+
+            return parseInt(res[1]);
+        }
+
+        export function WiFiConnect(ssid: string, password: string): void {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["wifi_connect", ssid, password]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 1) control.panic(2);
+            if (res[0] !== "ok") control.panic(3);
+        }
+
+        export function WiFiDisconnect(): void {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["wifi_disconnect"]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 1) control.panic(4);
+            if (res[0] !== "ok") control.panic(5);
+        }
+
+        export function WiFiIsConnected(): boolean {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["wifi_isconnected"]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 2) control.panic(6);
+            if (res[0] !== "ok") control.panic(7);
+
+            return res[1] !== "0";
+        }
+
+        export function WsSecurity(): void {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["ws_security", "insecure"]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 1) control.panic(8);
+            if (res[0] !== "ok") control.panic(9);
+        }
+
+        export function WsConnect(url: string): boolean {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["ws_connect", url]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 1) control.panic(10);
+            if (res[0] === "connect_error") {
+                ReturnToken();
+                return false;
+            }
+            if (res[0] !== "ok") control.panic(11);
+
+            return true;
+        }
+
+        // Diagnostic helper: return the raw response to ws_connect.
+        export function WsDiagnostic(url: string): string {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["ws_connect", url]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+            return res.join("|");
+        }
+
+        export function WsClose(): void {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["ws_close"]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 1) control.panic(12);
+            if (res[0] !== "ok") control.panic(13);
+        }
+
+        export function WsSend(str: string): void {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["ws_send", str.length.toString(), str]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 1) control.panic(14);
+            if (res[0] !== "ok") control.panic(15);
+        }
+
+        export function WsReceivedCount(): number {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["ws_receivedcount"]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length !== 2) control.panic(16);
+            if (res[0] !== "ok") control.panic(17);
+
+            return parseInt(res[1]);
+        }
+
+        export function WsReceive(): string {
+            GetToken();
+            SerialInterface.PreRead();
+            SerialInterface.Write(["ws_receive"]);
+            let res = SerialInterface.Read();
+            ReturnToken();
+
+            if (res.length < 1) control.panic(18);
+            if (res[0] === "not_received") return undefined;
+            if (res[0] !== "ok") control.panic(19);
+            if (res.length !== 3) control.panic(20);
+
+            return res[2];
+        }
+
+    }
+
+    // Wi-Fi event handlers and connection state
+    let wifiConnectedHandler: () => void;
+    let wifiFailedHandler: () => void;
+    let wifiDisconnectedHandler: () => void;
+    let wifiMonitorStarted = false;
+    let wifiWasConnected = false;
+    let wifiConnecting = false;
+    let wifiConnectStartedAt = 0;
+
+    function startWiFiMonitor(): void {
+        if (wifiMonitorStarted) return;
+        wifiMonitorStarted = true;
+        control.inBackground(() => {
+            while (true) {
+                let connected = GroveWiFi.WiFiIsConnected();
+                if (connected && !wifiWasConnected) {
+                    wifiWasConnected = true;
+                    wifiConnecting = false;
+                    if (wifiConnectedHandler) wifiConnectedHandler();
+                } else if (!connected && wifiWasConnected) {
+                    wifiWasConnected = false;
+                    if (wifiDisconnectedHandler) wifiDisconnectedHandler();
+                } else if (!connected && wifiConnecting && input.runningTime() - wifiConnectStartedAt >= WIFI_CONNECT_TIMEOUT) {
+                    wifiConnecting = false;
+                    if (wifiFailedHandler) wifiFailedHandler();
+                }
+                basic.pause(500);
+            }
+        });
+    }
+
+    /** Select the Grove Shield UART pins for Grove UART WiFi V2. */
+    //% block="[Grove - UART WiFi V2] communication port|%connector"
+    //% weight=100
+    export function WiringGroveWiFi(connector: HUConnectConnector): void {
+        switch (connector) {
+            case HUConnectConnector.P00P14:
+                serial.redirect(SerialPin.P14, SerialPin.P0, BaudRate.BaudRate9600);
+                break;
+            case HUConnectConnector.P01P15:
+                serial.redirect(SerialPin.P15, SerialPin.P1, BaudRate.BaudRate9600);
+                break;
+            case HUConnectConnector.P02P16:
+                serial.redirect(SerialPin.P16, SerialPin.P2, BaudRate.BaudRate9600);
+                break;
+        }
+        serial.setRxBufferSize(RX_BUFFER_SIZE);
+        startWiFiMonitor();
+    }
+
+    /** Connect to a Wi-Fi access point. */
+    //% block="connect to Wi-Fi|SSID %ssid|password %password"
+    //% weight=90
+    export function ConnectWiFi(ssid: string, password: string): void {
+        wifiConnecting = true;
+        wifiConnectStartedAt = input.runningTime();
+        GroveWiFi.WiFiConnect(ssid, password);
+    }
+
+    /** Run code when Wi-Fi connection is detected. */
+    //% block="on Wi-Fi connected"
+    //% weight=80
+    export function ConnectedWiFiSuccess(handler: () => void): void {
+        wifiConnectedHandler = handler;
+    }
+
+    /** Run code when Wi-Fi connection fails. */
+    //% block="on Wi-Fi connection failed"
+    //% weight=79
+    export function ConnectedWiFiFail(handler: () => void): void {
+        wifiFailedHandler = handler;
+    }
+
+    /** Run code when Wi-Fi is disconnected. */
+    //% block="on Wi-Fi disconnected"
+    //% weight=78
+    export function DisconnectedWiFiSuccess(handler: () => void): void {
+        wifiDisconnectedHandler = handler;
+    }
+
+    /** Connect to a custom WebSocket server. Statement block; no value is returned. */
+    //% blockId=HUConnect_ConnectCustomWebSocket
+    //% block="カスタムWebSocketに接続 URL %url"
+    //% url.defl="ws://172.20.10.5:8765"
+    //% weight=70
+    export function ConnectCustomWebSocket(url: string): void {
+        GroveWiFi.WsSecurity();
+        GroveWiFi.WsConnect(url);
+    }
+
+    /** Send a text message over the established WebSocket connection. */
+    //% blockId=HUConnect_SendCustomWebSocketMessage
+    //% block="WebSocketでメッセージを送信 %message"
+    //% weight=60
+    export function SendCustomWebSocketMessage(message: string): void {
+        GroveWiFi.WsSend(message);
+    }
+
+    /** Send a numeric value over the established WebSocket connection. */
+    //% blockId=HUConnect_SendCustomWebSocketNumber
+    //% block="WebSocketで数値を送信 %value"
+    //% value.defl=23.6
+    //% weight=55
+    export function SendCustomWebSocketNumber(value: number): void {
+        GroveWiFi.WsSend(value.toString());
+    }
+
+    /** Return the raw response from a WebSocket connection attempt (diagnostic). */
+    //% block="get custom WebSocket response for URL %url"
+    //% url.defl="ws://172.20.10.5:8765"
+    //% weight=50
+    export function CustomWebSocketDiagnostic(url: string): string {
+        GroveWiFi.WsSecurity();
+        return GroveWiFi.WsDiagnostic(url);
+    }
+
+    /** Close the current WebSocket connection. */
+    //% block="disconnect custom WebSocket"
+    //% weight=40
+    export function DisconnectCustomWebSocket(): void {
+        GroveWiFi.WsClose();
+    }
+
+}
