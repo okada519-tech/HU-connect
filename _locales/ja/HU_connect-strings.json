@@ -1,0 +1,12 @@
+{
+  "{id:category}HUConnect": "HU connect",
+  "HUConnect.WiringGroveWiFi|block": "[Grove - UART WiFi V2] 通信端子%connector",
+  "HUConnect.ConnectWiFi|block": "Wi-Fiに接続 SSID %ssid パスワード %password",
+  "HUConnect.ConnectedWiFiSuccess|block": "Wi-Fiの接続が成功したとき",
+  "HUConnect.ConnectedWiFiFail|block": "Wi-Fiの接続が失敗したとき",
+  "HUConnect.DisconnectedWiFiSuccess|block": "Wi-Fiが切断したとき",
+  "HUConnect.ConnectCustomWebSocket|block": "カスタムWebSocketに接続 URL %url",
+  "HUConnect.SendCustomWebSocketMessage|block": "WebSocketでメッセージを送信 %message",
+  "HUConnect.CustomWebSocketDiagnostic|block": "カスタムWebSocketの応答を取得 URL %url",
+  "HUConnect.DisconnectCustomWebSocket|block": "カスタムWebSocketを切断"
+}
